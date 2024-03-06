@@ -21,6 +21,11 @@ public class TFTPServer {
   public static final int OP_ACK = 4;
   public static final int OP_ERR = 5;
 
+  /**
+   * The main method.
+
+   * @param args The command line arguments.
+   */
   public static void main(String[] args) {
     if (args.length > 0) {
       System.err.printf("usage: java %s\n", TFTPServer.class.getCanonicalName());
@@ -73,90 +78,84 @@ public class TFTPServer {
             if (reqtype == OP_RRQ) {
               requestedFile.insert(0, READDIR);
               HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
-            } else {                       
-							requestedFile.insert(0, WRITEDIR);
-							HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);  
-						}
-						sendSocket.close();
-					} 
-					catch (SocketException e) 
-						{e.printStackTrace();}
-				}
-			}.start();
-		}
-	}
-	
-	/**
-	 * Reads the first block of data, i.e., the request for an action (read or write).
-	 * @param socket (socket to read from)
-	 * @param buf (where to store the read data)
-	 * @return socketAddress (the socket address of the client)
-	 */
-	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) 
-	{
-		// Create datagram packet
-		
-		// Receive packet
-		
-		// Get client address and port from the packet
-		
-		return socketAddress;
-	}
+            } else {
+                requestedFile.insert(0, WRITEDIR);
+                HandleRQ(sendSocket, requestedFile.toString(), OP_WRQ);
+            }
+            sendSocket.close();
+          } catch (SocketException e) {
+            e.printStackTrace();
+          }
+        }
+      }.start();
+    }
+  }
 
-	/**
-	 * Parses the request in buf to retrieve the type of request and requestedFile
-	 * 
-	 * @param buf (received request)
-	 * @param requestedFile (name of file to read/write)
-	 * @return opcode (request type: RRQ or WRQ)
-	 */
-	private int ParseRQ(byte[] buf, StringBuffer requestedFile) 
-	{
-		// See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
-		
-		return opcode;
-	}
+  /**
+  * Reads the first block of data, i.e., the request for an action (read or write).
 
-	/**
-	 * Handles RRQ and WRQ requests 
-	 * 
-	 * @param sendSocket (socket used to send/receive packets)
-	 * @param requestedFile (name of file to read/write)
-	 * @param opcode (RRQ or WRQ)
-	 */
-	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) 
-	{		
-		if(opcode == OP_RRQ)
-		{
-			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
-			boolean result = send_DATA_receive_ACK(params);
-		}
-		else if (opcode == OP_WRQ) 
-		{
-			boolean result = receive_DATA_send_ACK(params);
-		}
-		else 
-		{
-			System.err.println("Invalid request. Sending an error packet.");
-			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			send_ERR(params);
-			return;
-		}		
-	}
-	
-	/**
-	To be implemented
-	*/
-	private boolean send_DATA_receive_ACK(params)
-	{return true;}
-	
-	private boolean receive_DATA_send_ACK(params)
-	{return true;}
-	
-	private void send_ERR(params)
-	{}
-	
+  * @param socket (socket to read from)
+  * @param buf (where to store the read data)
+  * @return socketAddress (the socket address of the client)
+  */
+  private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) {
+    // Create datagram packet
+
+    // Receive packet
+
+    // Get client address and port from the packet
+
+    return socketAddress;
+  }
+
+  /**
+   * Parses the request in buf to retrieve the type of request and requestedFile.
+
+   * @param buf (received request)
+   * @param requestedFile (name of file to read/write)
+   * @return opcode (request type: RRQ or WRQ)
+   */
+  private int ParseRQ(byte[] buf, StringBuffer requestedFile) {
+    // See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
+
+    return opcode;
+  }
+
+  /**
+  * Handles RRQ and WRQ requests.
+
+  * @param sendSocket (socket used to send/receive packets)
+  * @param requestedFile (name of file to read/write)
+  * @param opcode (RRQ or WRQ)
+  */
+  private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
+    if (opcode == OP_RRQ) {
+      // See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
+      boolean result = send_DATA_receive_ACK(params);
+    } else if (opcode == OP_WRQ) {
+      boolean result = receive_DATA_send_ACK(params);
+    } else {
+      System.err.println("Invalid request. Sending an error packet.");
+      // See "TFTP Formats" in TFTP specification for the ERROR packet contents
+      send_ERR(params);
+      return;
+    }
+  }
+
+  /**
+   * To be implemented.
+   */
+  private boolean send_DATA_receive_ACK() {
+    return true;
+  }
+
+  private boolean receive_DATA_send_ACK() {
+    return true;
+  }
+
+  private void send_ERR() {
+    return;
+  }
 }
-
 
 
