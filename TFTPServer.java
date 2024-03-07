@@ -15,6 +15,9 @@ import java.nio.ByteBuffer;
  */
 public class TFTPServer {
 
+  private DatagramSocket sendSocket;
+  private String requestedFile;
+
   public static final int TFTPPORT = 4970;
   public static final int BUFSIZE = 516;
   public static final String READDIR = "/home/username/read/"; //custom address at your PC
@@ -112,14 +115,13 @@ public class TFTPServer {
 
     DatagramPacket receivePacket = new DatagramPacket(buf, buf.length);
     try {
-        socket.receive(receivePacket);
-        InetSocketAddress socketAddress = new InetSocketAddress(receivePacket.getAddress(), receivePacket.getPort());
-        return socketAddress;
+      socket.receive(receivePacket);
+      InetSocketAddress socketAddress = new InetSocketAddress(receivePacket.getAddress(), receivePacket.getPort());
+      return socketAddress;
     } catch (IOException e) {
-        e.printStackTrace();
-        return null;
+      e.printStackTrace();
+      return null;
     }
-    return socketAddress;
   }
 
   /**
@@ -135,12 +137,12 @@ public class TFTPServer {
     ByteBuffer wrap = ByteBuffer.wrap(buf);
     short opcode = wrap.getShort();
     if (opcode == OP_RRQ) {
-        // Read Request
-        int index = 2;
-        while (buf[index] != 0) {
-            requestedFile.append((char) buf[index]);
-            index++;
-        }
+      // Read Request
+      int index = 2;
+      while (buf[index] != 0) {
+        requestedFile.append((char) buf[index]);
+        index++;
+      }
     } else if (opcode == OP_WRQ) {
         // Write Request
         // Similar to Read Request, extract file name
@@ -177,77 +179,79 @@ public class TFTPServer {
    */
   private boolean send_DATA_receive_ACK() {
     try (FileInputStream fis = new FileInputStream(requestedFile)) {
-        int blockNumber = 1;
-        byte[] buffer = new byte[BUFSIZE - 4]; // 4 bytes for opcode and block number
-        int bytesRead;
+      int blockNumber = 1;
+      byte[] buffer = new byte[BUFSIZE - 4]; // 4 bytes for opcode and block number
+      int bytesRead;
 
-        while ((bytesRead = fis.read(buffer)) != -1) {
-            ByteBuffer packetBuffer = ByteBuffer.allocate(bytesRead + 4);
-            packetBuffer.putShort((short) OP_DAT); // Opcode for Data packet
-            packetBuffer.putShort((short) blockNumber); // Block number
-            packetBuffer.put(buffer, 0, bytesRead);
+      while ((bytesRead = fis.read(buffer)) != -1) {
+        ByteBuffer packetBuffer = ByteBuffer.allocate(bytesRead + 4);
+        packetBuffer.putShort((short) OP_DAT); // Opcode for Data packet
+        packetBuffer.putShort((short) blockNumber); // Block number
+        packetBuffer.put(buffer, 0, bytesRead);
 
-            DatagramPacket dataPacket = new DatagramPacket(packetBuffer.array(), packetBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
-            sendSocket.send(dataPacket);
+        DatagramPacket dataPacket = new DatagramPacket(packetBuffer.array(), packetBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
+        sendSocket.send(dataPacket);
 
-            if (!receive_ACK(sendSocket, blockNumber))
-                return false; // If ACK not received, return false
-
-            blockNumber++;
+        if (!receive_ACK(sendSocket, blockNumber)) {
+          return false; // If ACK not received, return false
         }
 
-        // All data sent successfully
-        return true;
+        blockNumber++;
+      }
+
+      // All data sent successfully
+      return true;
     } catch (IOException e) {
-        e.printStackTrace();
-        return false;
+      e.printStackTrace();
+      return false;
     }
   }
 
   private boolean receive_DATA_send_ACK() {
     try (FileOutputStream fos = new FileOutputStream(requestedFile)) {
-        int expectedBlockNumber = 1;
+      int expectedBlockNumber = 1;
 
-        while (true) {
-            ByteBuffer ackBuffer = ByteBuffer.allocate(4); // ACK packet size
-            ackBuffer.putShort((short) OP_ACK); // Opcode for ACK packet
-            ackBuffer.putShort((short) expectedBlockNumber); // Expected block number
+      while (true) {
+        ByteBuffer ackBuffer = ByteBuffer.allocate(4); // ACK packet size
+        ackBuffer.putShort((short) OP_ACK); // Opcode for ACK packet
+        ackBuffer.putShort((short) expectedBlockNumber); // Expected block number
 
-            DatagramPacket ackPacket = new DatagramPacket(ackBuffer.array(), ackBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
-            sendSocket.send(ackPacket);
+        DatagramPacket ackPacket = new DatagramPacket(ackBuffer.array(), ackBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
+        sendSocket.send(ackPacket);
 
-            // Receive Data packet
-            byte[] buf = new byte[BUFSIZE];
-            DatagramPacket dataPacket = new DatagramPacket(buf, buf.length);
-            sendSocket.receive(dataPacket);
+        // Receive Data packet
+        byte[] buf = new byte[BUFSIZE];
+        DatagramPacket dataPacket = new DatagramPacket(buf, buf.length);
+        sendSocket.receive(dataPacket);
 
-            ByteBuffer dataBuffer = ByteBuffer.wrap(buf);
-            int opcode = dataBuffer.getShort();
-            int blockNumber = dataBuffer.getShort();
+        ByteBuffer dataBuffer = ByteBuffer.wrap(buf);
+        int opcode = dataBuffer.getShort();
+        int blockNumber = dataBuffer.getShort();
 
-            if (opcode != OP_DAT || blockNumber != expectedBlockNumber) {
-                // Invalid packet received
-                send_ERR(sendSocket, 0, "Invalid data packet received");
-                return false;
-            }
-
-            // Write data to file
-            fos.write(buf, 4, dataPacket.getLength() - 4);
-
-            // Send ACK for the received data packet
-            sendSocket.send(ackPacket);
-
-            if (dataPacket.getLength() < BUFSIZE - 4)
-                break; // Last data packet received
-
-            expectedBlockNumber++;
+        if (opcode != OP_DAT || blockNumber != expectedBlockNumber) {
+          // Invalid packet received
+          send_ERR(sendSocket, 0, "Invalid data packet received");
+          return false;
         }
 
-        // All data received successfully
-        return true;
+        // Write data to file
+        fos.write(buf, 4, dataPacket.getLength() - 4);
+
+        // Send ACK for the received data packet
+        sendSocket.send(ackPacket);
+
+        if (dataPacket.getLength() < BUFSIZE - 4) {
+          break; // Last data packet received
+        }
+
+        expectedBlockNumber++;
+      }
+      // All data received successfully
+      return true;
+
     } catch (IOException e) {
-        e.printStackTrace();
-        return false;
+      e.printStackTrace();
+      return false;
     }
   }
 
@@ -260,9 +264,9 @@ public class TFTPServer {
 
     DatagramPacket errPacket = new DatagramPacket(errBuffer.array(), errBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
     try {
-        sendSocket.send(errPacket);
+      sendSocket.send(errPacket);
     } catch (IOException e) {
-        e.printStackTrace();
+      e.printStackTrace();
     }
   }
 }
