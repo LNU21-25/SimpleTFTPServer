@@ -80,7 +80,7 @@ public class TFTPServer {
 
             System.out.printf("%s request for %s from %s using port %d\n",
                 (reqtype == OP_RRQ) ? "Read" : "Write",
-                clientAddress.getHostName(), clientAddress.getPort());  
+                clientAddress.getHostName(), clientAddress.getPort());
 
             // Read request
             if (reqtype == OP_RRQ) {
