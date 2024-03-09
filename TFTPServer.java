@@ -15,13 +15,10 @@ import java.nio.ByteBuffer;
  */
 public class TFTPServer {
 
-  private DatagramSocket sendSocket;
-  private String requestedFile;
-
-  public static final int TFTPPORT = 4970;
+  public static final int TFTPPORT = 69;
   public static final int BUFSIZE = 516;
-  public static final String READDIR = "/home/username/read/"; //custom address at your PC
-  public static final String WRITEDIR = "/home/username/write/"; //custom address at your PC
+  public static final String READDIR = "./read/"; //custom address at your PC
+  public static final String WRITEDIR = "./write/"; //custom address at your PC
   // OP codes
   public static final int OP_RRQ = 1;
   public static final int OP_WRQ = 2;
@@ -39,7 +36,7 @@ public class TFTPServer {
       System.err.printf("usage: java %s\n", TFTPServer.class.getCanonicalName());
       System.exit(1);
     }
-    //Starting the server
+    // Starting the server.
     try {
       TFTPServer server = new TFTPServer();
       server.start();
@@ -64,7 +61,6 @@ public class TFTPServer {
     while (true) {        
       final InetSocketAddress clientAddress = receiveFrom(socket, buf);
 
-      // If clientAddress is null, an error occurred in receiveFrom()
       if (clientAddress == null) {
         continue;
       }
@@ -78,16 +74,18 @@ public class TFTPServer {
             // Connect to client
             sendSocket.connect(clientAddress);
 
-            System.out.printf("%s request for %s from %s using port %d\n",
+            System.out.printf("%s request from %s using port %d\n",
                 (reqtype == OP_RRQ) ? "Read" : "Write",
                 clientAddress.getHostName(), clientAddress.getPort());
 
             // Read request
             if (reqtype == OP_RRQ) {
               requestedFile.insert(0, READDIR);
+              System.out.println("Read dir: " + requestedFile.toString());
               HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
             } else {
                 requestedFile.insert(0, WRITEDIR);
+                System.out.println("Write dir: " + requestedFile.toString());
                 HandleRQ(sendSocket, requestedFile.toString(), OP_WRQ);
             }
             sendSocket.close();
@@ -107,12 +105,6 @@ public class TFTPServer {
   * @return socketAddress (the socket address of the client)
   */
   private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) {
-    // Create datagram packet
-
-    // Receive packet
-
-    // Get client address and port from the packet
-
     DatagramPacket receivePacket = new DatagramPacket(buf, buf.length);
     try {
       socket.receive(receivePacket);
@@ -144,9 +136,15 @@ public class TFTPServer {
         index++;
       }
     } else if (opcode == OP_WRQ) {
-        // Write Request
-        // Similar to Read Request, extract file name
-        // Implement if needed
+      // Write Request
+      int index = 2;
+      while (buf[index] != 0) {
+        requestedFile.append((char) buf[index]);
+        index++;
+      }
+    } else {
+      System.err.println("Invalid request opcode: " + opcode);
+      return -1;
     }
     return opcode;
   }
@@ -162,14 +160,26 @@ public class TFTPServer {
     if (opcode == OP_RRQ) {
       // See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
       //boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
-      boolean result = send_DATA_receive_ACK(params);
+      boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
+      if (!result) {
+        System.err.println("Error reading file: " + requestedFile);
+        send_ERR(sendSocket, 1, "File not found");
+      } else {
+        System.out.println("File sent successfully.");
+      }
     } else if (opcode == OP_WRQ) {
       //boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
-      boolean result = receive_DATA_send_ACK(params);
+      boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
+      if (!result) {
+        System.err.println("Error writing file: " + requestedFile);
+        send_ERR(sendSocket, 4, "Error writing file");
+      } else {
+        System.out.println("File received successfully.");
+      }
     } else {
       System.err.println("Invalid request. Sending an error packet.");
       // See "TFTP Formats" in TFTP specification for the ERROR packet contents
-      send_ERR(params);
+      send_ERR(sendSocket, 5, "Invalid request");
       return;
     }
   }
@@ -177,7 +187,7 @@ public class TFTPServer {
   /**
    * To be implemented.
    */
-  private boolean send_DATA_receive_ACK() {
+  private boolean send_DATA_receive_ACK(DatagramSocket sendSocket, String requestedFile) {
     try (FileInputStream fis = new FileInputStream(requestedFile)) {
       int blockNumber = 1;
       byte[] buffer = new byte[BUFSIZE - 4]; // 4 bytes for opcode and block number
@@ -192,14 +202,23 @@ public class TFTPServer {
         DatagramPacket dataPacket = new DatagramPacket(packetBuffer.array(), packetBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
         sendSocket.send(dataPacket);
 
-        if (!receive_ACK(sendSocket, blockNumber)) {
-          return false; // If ACK not received, return false
+        byte[] ackBuf = new byte[4];
+        DatagramPacket ackPacket = new DatagramPacket(ackBuf, ackBuf.length);
+        sendSocket.receive(ackPacket);
+
+        ByteBuffer ackBuffer = ByteBuffer.wrap(ackBuf);
+        int ackOpcode = ackBuffer.getShort();
+        int ackBlockNumber = ackBuffer.getShort();
+
+        if (ackOpcode != OP_ACK || ackBlockNumber != blockNumber) {
+          send_ERR(sendSocket, 0, "Invalid ACK packet received");
+          continue;
         }
 
         blockNumber++;
       }
-
       // All data sent successfully
+      fis.close();
       return true;
     } catch (IOException e) {
       e.printStackTrace();
@@ -207,7 +226,7 @@ public class TFTPServer {
     }
   }
 
-  private boolean receive_DATA_send_ACK() {
+  private boolean receive_DATA_send_ACK(DatagramSocket sendSocket, String requestedFile) {
     try (FileOutputStream fos = new FileOutputStream(requestedFile)) {
       int expectedBlockNumber = 1;
 
@@ -247,6 +266,7 @@ public class TFTPServer {
         expectedBlockNumber++;
       }
       // All data received successfully
+      fos.close();
       return true;
 
     } catch (IOException e) {
@@ -255,7 +275,7 @@ public class TFTPServer {
     }
   }
 
-  private void send_ERR() {
+  private void send_ERR(DatagramSocket sendSocket, int errorCode, String errorMsg) {
     ByteBuffer errBuffer = ByteBuffer.allocate(errorMsg.length() + 5); // 5 bytes for opcode and error code
     errBuffer.putShort((short) OP_ERR); // Opcode for Error packet
     errBuffer.putShort((short) errorCode); // Error code

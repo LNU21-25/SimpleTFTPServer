@@ -1,7 +1,7 @@
 import pytest
 
 HOST = 'localhost'
-PORT = 1234
+PORT = 69
 
 # Init client
 @pytest.fixture(scope="module")
