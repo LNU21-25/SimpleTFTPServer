@@ -1,5 +1,6 @@
 package assignment3;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -8,6 +9,7 @@ import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 
 /**
@@ -160,6 +162,12 @@ public class TFTPServer {
     if (opcode == OP_RRQ) {
       // See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
       //boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
+      File requestedFileObj = new File(requestedFile);
+      if (!requestedFileObj.exists()) {
+        System.err.println("File not found: " + requestedFile);
+        send_ERR(sendSocket, 1, "File not found");
+        return;
+      }
       boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
       if (!result) {
         System.err.println("Error reading file: " + requestedFile);
@@ -192,6 +200,8 @@ public class TFTPServer {
       int blockNumber = 1;
       byte[] buffer = new byte[BUFSIZE - 4]; // 4 bytes for opcode and block number
       int bytesRead;
+      int retries = 0;
+      long startTime = System.currentTimeMillis();
 
       while ((bytesRead = fis.read(buffer)) != -1) {
         ByteBuffer packetBuffer = ByteBuffer.allocate(bytesRead + 4);
@@ -204,7 +214,22 @@ public class TFTPServer {
 
         byte[] ackBuf = new byte[4];
         DatagramPacket ackPacket = new DatagramPacket(ackBuf, ackBuf.length);
-        sendSocket.receive(ackPacket);
+        int numAttempts = 0;
+        while (numAttempts < 3) {
+          try {
+            sendSocket.receive(ackPacket);
+            break;
+          } catch (SocketTimeoutException e) {
+            System.err.println("Timeout waiting for ACK for block " + blockNumber);
+            retries++;
+            if (retries > 5) {
+              throw new IOException("Failed to receive ACK after retries.");
+            }
+            sendSocket.send(dataPacket);
+            startTime = System.currentTimeMillis();
+            numAttempts++;
+          }
+        }
 
         ByteBuffer ackBuffer = ByteBuffer.wrap(ackBuf);
         int ackOpcode = ackBuffer.getShort();
@@ -217,6 +242,16 @@ public class TFTPServer {
 
         blockNumber++;
       }
+
+      if (bytesRead < BUFSIZE - 4) {
+        ByteBuffer ackBuffer = ByteBuffer.allocate(4); // ACK packet size
+        ackBuffer.putShort((short) OP_ACK); // Opcode for ACK packet
+        ackBuffer.putShort((short) blockNumber); // Block number
+
+        DatagramPacket ackPacket = new DatagramPacket(ackBuffer.array(), ackBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
+        sendSocket.send(ackPacket);
+      }
+      
       // All data sent successfully
       fis.close();
       return true;
