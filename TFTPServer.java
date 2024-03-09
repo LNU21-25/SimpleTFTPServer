@@ -192,66 +192,66 @@ public class TFTPServer {
     }
   }
 
-  /**
-   * To be implemented.
-   */
   private boolean send_DATA_receive_ACK(DatagramSocket sendSocket, String requestedFile) {
     try (FileInputStream fis = new FileInputStream(requestedFile)) {
       int blockNumber = 1;
       byte[] buffer = new byte[BUFSIZE - 4]; // 4 bytes for opcode and block number
       int bytesRead;
-      int retries = 0;
-      long startTime = System.currentTimeMillis();
-
+  
       while ((bytesRead = fis.read(buffer)) != -1) {
         ByteBuffer packetBuffer = ByteBuffer.allocate(bytesRead + 4);
         packetBuffer.putShort((short) OP_DAT); // Opcode for Data packet
         packetBuffer.putShort((short) blockNumber); // Block number
         packetBuffer.put(buffer, 0, bytesRead);
-
+  
         DatagramPacket dataPacket = new DatagramPacket(packetBuffer.array(), packetBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
-        sendSocket.send(dataPacket);
-
+  
+        int retries = 0;
         byte[] ackBuf = new byte[4];
-        DatagramPacket ackPacket = new DatagramPacket(ackBuf, ackBuf.length);
-        int numAttempts = 0;
-        while (numAttempts < 3) {
+        while (retries < 5) {
+          sendSocket.send(dataPacket);
+
+          DatagramPacket ackPacket = new DatagramPacket(ackBuf, ackBuf.length);
           try {
+            sendSocket.setSoTimeout(5000);
             sendSocket.receive(ackPacket);
             break;
           } catch (SocketTimeoutException e) {
             System.err.println("Timeout waiting for ACK for block " + blockNumber);
             retries++;
-            if (retries > 5) {
-              throw new IOException("Failed to receive ACK after retries.");
-            }
-            sendSocket.send(dataPacket);
-            startTime = System.currentTimeMillis();
-            numAttempts++;
+          } catch (IOException e) {
+            System.err.println("Unexpected IO error: " + e.getMessage());
+            send_ERR(sendSocket, 1, "Error reading file");
+            return false;
           }
+        }
+  
+        if (retries == 5) {
+          send_ERR(sendSocket, 4, "File not found");
+          return false;
         }
 
         ByteBuffer ackBuffer = ByteBuffer.wrap(ackBuf);
         int ackOpcode = ackBuffer.getShort();
         int ackBlockNumber = ackBuffer.getShort();
-
+  
         if (ackOpcode != OP_ACK || ackBlockNumber != blockNumber) {
           send_ERR(sendSocket, 0, "Invalid ACK packet received");
           continue;
         }
-
+  
         blockNumber++;
       }
-
+  
       if (bytesRead < BUFSIZE - 4) {
-        ByteBuffer ackBuffer = ByteBuffer.allocate(4); // ACK packet size
-        ackBuffer.putShort((short) OP_ACK); // Opcode for ACK packet
-        ackBuffer.putShort((short) blockNumber); // Block number
-
+        ByteBuffer ackBuffer = ByteBuffer.allocate(4);
+        ackBuffer.putShort((short) OP_ACK);
+        ackBuffer.putShort((short) blockNumber);
+  
         DatagramPacket ackPacket = new DatagramPacket(ackBuffer.array(), ackBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
         sendSocket.send(ackPacket);
       }
-      
+  
       // All data sent successfully
       fis.close();
       return true;
