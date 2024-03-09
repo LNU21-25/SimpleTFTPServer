@@ -7,11 +7,11 @@ PORT = 69
 @pytest.fixture(scope="module")
 def getClient():
     import tftpclient
-    return tftpclient.TFTPClient((HOST, PORT), '/home/ubuntu/tftpdir/read/')
+    return tftpclient.TFTPClient((HOST, PORT), './read/')
     
 def putClient():
     import tftpclient
-    return tftpclient.TFTPClient((HOST, PORT), '/home/ubuntu/tftpdir/write/')
+    return tftpclient.TFTPClient((HOST, PORT), './write/')
 
 
 # Get existing 50 byte file
@@ -58,17 +58,17 @@ def test_PMB3Blks(putClient):
 def test_PMB512Blks(putClient):
     assert putClient.putFileBlocks(b'f512blks.ul', 512)
 
-
+# pass
 # Try to get a file that does not exist
 def test_GFileNotExists(getClient):
     assert getClient.getFileNotExists(b'nosuchfile')
 
-
+# pass
 # Send unknown request type
 def test_BadOp10(getClient):
     assert getClient.sendBadOp(10)
 
-
+# pass
 # Send an unknown request type (similar to an existing)
 def test_BadOp257(getClient):
     assert getClient.sendBadOp(257)
