@@ -185,8 +185,7 @@ public class TFTPServer {
         System.out.println("File received successfully.");
       }
     } else {
-      System.err.println("Invalid request. Sending an error packet.");
-      // See "TFTP Formats" in TFTP specification for the ERROR packet contents
+      System.err.println("Invalid op code. Sending an error packet.");
       send_ERR(sendSocket, 5, "Invalid request");
       return;
     }
@@ -284,6 +283,7 @@ public class TFTPServer {
 
         if (opcode != OP_DAT || blockNumber != expectedBlockNumber) {
           // Invalid packet received
+          System.err.println("Invalid data packet received. Excepted block number: " + expectedBlockNumber + ", received: " + blockNumber);
           send_ERR(sendSocket, 0, "Invalid data packet received");
           return false;
         }
@@ -303,9 +303,9 @@ public class TFTPServer {
       // All data received successfully
       fos.close();
       return true;
-
     } catch (IOException e) {
       e.printStackTrace();
+      System.out.println("ioexception");
       return false;
     }
   }
