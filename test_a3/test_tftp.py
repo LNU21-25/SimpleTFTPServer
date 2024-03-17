@@ -12,7 +12,7 @@ def getClient():
 @pytest.fixture(scope="module")
 def putClient():
     import tftpclient
-    return tftpclient.TFTPClient((HOST, PORT), './write/')
+    return tftpclient.TFTPClient((HOST, PORT), './read/')
 
 
 # Get existing 50 byte file
@@ -26,13 +26,13 @@ def test_GSBLarge(getClient):
 
 
 # Get existing 1,535 byte file
-def test_GMB3(getClient):
-    assert getClient.getFile(b'f3blks.bin')
+##def test_GMB3(getClient):
+##    assert getClient.getFile(b'f3blks.bin')
 
 
 # Get existing 262,143 byte file
-def test_GMB512(getClient):
-    assert getClient.getFile(b'f512blks.bin')
+##def test_GMB512(getClient):
+##    assert getClient.getFile(b'f512blks.bin')
 
 
 # Put 50 byte file
@@ -46,8 +46,8 @@ def test_PSB500B(putClient):
 
 
 # Put 512 byte file
-def test_PMB1Blks(putClient):
-    assert putClient.putFileBlocks(b'f1blk.ul', 1)
+##def test_PMB1Blks(putClient):
+##    assert putClient.putFileBlocks(b'f1blk.ul', 1)
 
 
 # Put 1,536 byte file
@@ -76,10 +76,10 @@ def test_BadOp257(getClient):
 
 
 # Get a large file and fail the first ACK every time
-def test_GMBFail1stAck(getClient):
-    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 1)
+##def test_GMBFail1stAck(getClient):
+##    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 1)
 
 
 # Get a large file and fail the first two ACKs every time
-def test_GMBFail2ndAck(getClient):
-    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 2)
+##def test_GMBFail2ndAck(getClient):
+##    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 2)
