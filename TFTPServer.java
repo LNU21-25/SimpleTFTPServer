@@ -1,4 +1,4 @@
-package assignment3;
+//package assignment3;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
  */
 public class TFTPServer {
 
-  public static final int TFTPPORT = 69;
+  public static final int TFTPPORT = 4970;
   public static final int BUFSIZE = 516;
   public static final String READDIR = "./read/"; //custom address at your PC
   public static final String WRITEDIR = "./write/"; //custom address at your PC
@@ -34,10 +34,11 @@ public class TFTPServer {
    * @param args The command line arguments.
    */
   public static void main(String[] args) {
+    System.out.println("TFTP server started.");
     if (args.length > 0) {
       System.err.printf("usage: java %s\n", TFTPServer.class.getCanonicalName());
       System.exit(1);
-    }
+    } 
     // Starting the server.
     try {
       TFTPServer server = new TFTPServer();

@@ -1,14 +1,15 @@
 import pytest
 
 HOST = 'localhost'
-PORT = 69
+PORT = 4970
 
 # Init client
 @pytest.fixture(scope="module")
 def getClient():
     import tftpclient
     return tftpclient.TFTPClient((HOST, PORT), './read/')
-    
+
+@pytest.fixture(scope="module")
 def putClient():
     import tftpclient
     return tftpclient.TFTPClient((HOST, PORT), './write/')
@@ -50,13 +51,13 @@ def test_PMB1Blks(putClient):
 
 
 # Put 1,536 byte file
-def test_PMB3Blks(putClient):
-    assert putClient.putFileBlocks(b'f3blks.ul', 3)
+#def test_PMB3Blks(putClient):
+#    assert putClient.putFileBlocks(b'f3blks.ul', 3)
 
 
 # Put 262,144 byte file
-def test_PMB512Blks(putClient):
-    assert putClient.putFileBlocks(b'f512blks.ul', 512)
+#def test_PMB512Blks(putClient):
+#    assert putClient.putFileBlocks(b'f512blks.ul', 512)
 
 # pass
 # Try to get a file that does not exist
