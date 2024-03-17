@@ -177,7 +177,6 @@ public class TFTPServer {
         System.out.println("File sent successfully.");
       }
     } else if (opcode == OP_WRQ) {
-      //boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
       boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
       if (!result) {
         System.err.println("Error writing file: " + requestedFile);
@@ -235,7 +234,7 @@ public class TFTPServer {
         int ackOpcode = ackBuffer.getShort();
         int ackBlockNumber = ackBuffer.getShort();
   
-        if (ackOpcode != OP_ACK || ackBlockNumber != blockNumber) {
+        if (ackOpcode != OP_ACK || ackBlockNumber != blockNumber - 1) {
           send_ERR(sendSocket, 0, "Invalid ACK packet received");
           continue;
         }
@@ -263,7 +262,7 @@ public class TFTPServer {
 
   private boolean receive_DATA_send_ACK(DatagramSocket sendSocket, String requestedFile) {
     try (FileOutputStream fos = new FileOutputStream(requestedFile)) {
-      int expectedBlockNumber = 0;
+      int expectedBlockNumber = 1;
 
       while (true) {
         ByteBuffer ackBuffer = ByteBuffer.allocate(4); // ACK packet size
