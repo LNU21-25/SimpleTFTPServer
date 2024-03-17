@@ -263,7 +263,7 @@ public class TFTPServer {
 
   private boolean receive_DATA_send_ACK(DatagramSocket sendSocket, String requestedFile) {
     try (FileOutputStream fos = new FileOutputStream(requestedFile)) {
-      int expectedBlockNumber = 1;
+      int expectedBlockNumber = 0;
 
       while (true) {
         ByteBuffer ackBuffer = ByteBuffer.allocate(4); // ACK packet size
