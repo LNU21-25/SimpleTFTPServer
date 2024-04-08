@@ -9,14 +9,12 @@ import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 
 /**
  * A simple TFTP Server.
  */
 public class TFTPServer {
-
   public static final int TFTPPORT = 4970;
   public static final int BUFSIZE = 516;
   public static final String READDIR = "./read/"; //custom address at your PC
@@ -28,8 +26,11 @@ public class TFTPServer {
   public static final int OP_ACK = 4;
   public static final int OP_ERR = 5;
 
+  final int TIMEOUT_DURATION = 5000;
+
   /**
-   * The main method.
+   * The main method to start the TFTP Server.
+   * It does not take any command line arguments.
 
    * @param args The command line arguments.
    */
@@ -39,7 +40,7 @@ public class TFTPServer {
       System.err.printf("usage: java %s\n", TFTPServer.class.getCanonicalName());
       System.exit(1);
     } 
-    // Starting the server.
+    // Attempt to start server.
     try {
       TFTPServer server = new TFTPServer();
       server.start();
@@ -48,6 +49,11 @@ public class TFTPServer {
     }
   }
 
+  /**
+   * Start the TFTP Server.
+
+   * @throws SocketException If the socket encounters an error.
+   */
   private void start() throws SocketException {
     byte[] buf = new byte[BUFSIZE];
 
@@ -63,10 +69,10 @@ public class TFTPServer {
     // Loop to handle client requests 
     while (true) {        
       final InetSocketAddress clientAddress = receiveFrom(socket, buf);
-
       if (clientAddress == null) {
         continue;
       }
+
       final StringBuffer requestedFile = new StringBuffer();
       final int reqtype = ParseRQ(buf, requestedFile);
 
@@ -81,16 +87,8 @@ public class TFTPServer {
                 (reqtype == OP_RRQ) ? "Read" : "Write",
                 clientAddress.getHostName(), clientAddress.getPort());
 
-            // Read request
-            if (reqtype == OP_RRQ) {
-              requestedFile.insert(0, READDIR);
-              System.out.println("Read dir: " + requestedFile.toString());
-              HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
-            } else {
-                requestedFile.insert(0, WRITEDIR);
-                System.out.println("Write dir: " + requestedFile.toString());
-                HandleRQ(sendSocket, requestedFile.toString(), OP_WRQ);
-            }
+                String directory = (reqtype == OP_RRQ) ? READDIR : WRITEDIR;
+                HandleRQ(sendSocket, directory + requestedFile, reqtype);
             sendSocket.close();
           } catch (SocketException e) {
             e.printStackTrace();
@@ -160,170 +158,129 @@ public class TFTPServer {
   * @param opcode (RRQ or WRQ)
   */
   private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
+    File file = new File(requestedFile);
+    if (opcode == OP_RRQ && !file.exists()) {
+      send_ERR(sendSocket, 1, "File not found");
+      return;
+    }
     if (opcode == OP_RRQ) {
-      // See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
-      //boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
-      File requestedFileObj = new File(requestedFile);
-      if (!requestedFileObj.exists()) {
-        System.err.println("File not found: " + requestedFile);
-        send_ERR(sendSocket, 1, "File not found");
-        return;
-      }
       boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
-      if (!result) {
-        System.err.println("Error reading file: " + requestedFile);
-        send_ERR(sendSocket, 1, "File not found");
-      } else {
-        System.out.println("File sent successfully.");
-      }
+      System.out.println("Reading was " + (result ? "successful" : "unsuccessful"));
     } else if (opcode == OP_WRQ) {
       boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
-      if (!result) {
-        System.err.println("Error writing file: " + requestedFile);
-        send_ERR(sendSocket, 4, "Error writing file");
-      } else {
-        System.out.println("File received successfully.");
-      }
+      System.out.println("Writing was " + (result ? "successful" : "unsuccessful"));
     } else {
-      System.err.println("Invalid op code. Sending an error packet.");
-      send_ERR(sendSocket, 5, "Invalid request");
-      return;
+      send_ERR(sendSocket, 4, "Illegal TFTP operation");
     }
   }
 
   private boolean send_DATA_receive_ACK(DatagramSocket sendSocket, String requestedFile) {
     try (FileInputStream fis = new FileInputStream(requestedFile)) {
+      boolean lastPacket = false;
       int blockNumber = 1;
-      byte[] buffer = new byte[BUFSIZE - 4]; // 4 bytes for opcode and block number
-      int bytesRead;
-  
-      while ((bytesRead = fis.read(buffer)) != -1) {
-        ByteBuffer packetBuffer = ByteBuffer.allocate(bytesRead + 4);
-        packetBuffer.putShort((short) OP_DAT); // Opcode for Data packet
-        packetBuffer.putShort((short) blockNumber); // Block number
-        packetBuffer.put(buffer, 0, bytesRead);
-  
-        DatagramPacket dataPacket = new DatagramPacket(packetBuffer.array(), packetBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
-  
-        int retries = 0;
-        byte[] ackBuf = new byte[4];
-        while (retries < 5) {
-          sendSocket.send(dataPacket);
+      while (!lastPacket) {
+        byte[] readBytes = new byte[BUFSIZE - 4];
+        int bytesRead = fis.read(readBytes);
+        lastPacket = bytesRead < BUFSIZE - 4;
 
-          DatagramPacket ackPacket = new DatagramPacket(ackBuf, ackBuf.length);
-          try {
-            sendSocket.setSoTimeout(5000);
-            sendSocket.receive(ackPacket);
-            break;
-          } catch (SocketTimeoutException e) {
-            System.err.println("Timeout waiting for ACK for block " + blockNumber);
-            retries++;
-          } catch (IOException e) {
-            System.err.println("Unexpected IO error: " + e.getMessage());
-            send_ERR(sendSocket, 1, "Error reading file");
-            return false;
-          }
-        }
-  
-        if (retries == 5) {
-          send_ERR(sendSocket, 4, "File not found");
+        ByteBuffer buf = ByteBuffer.allocate(BUFSIZE);
+        buf.putShort((short) OP_DAT);
+        buf.putShort((short) blockNumber);
+        buf.put(readBytes, 0, bytesRead);
+
+        DatagramPacket dataPacket = new DatagramPacket(buf.array(), bytesRead + 4, sendSocket.getInetAddress(), sendSocket.getPort());
+        boolean ackReceived = sendPacketWithRetries(sendSocket, dataPacket, blockNumber);
+        if (!ackReceived) {
           return false;
         }
-
-        ByteBuffer ackBuffer = ByteBuffer.wrap(ackBuf);
-        int ackOpcode = ackBuffer.getShort();
-        int ackBlockNumber = ackBuffer.getShort();
-  
-        if (ackOpcode != OP_ACK || ackBlockNumber != blockNumber - 1) {
-          send_ERR(sendSocket, 0, "Invalid ACK packet received");
-          continue;
-        }
-  
         blockNumber++;
       }
-  
-      if (bytesRead < BUFSIZE - 4) {
-        ByteBuffer ackBuffer = ByteBuffer.allocate(4);
-        ackBuffer.putShort((short) OP_ACK);
-        ackBuffer.putShort((short) blockNumber);
-  
-        DatagramPacket ackPacket = new DatagramPacket(ackBuffer.array(), ackBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
-        sendSocket.send(ackPacket);
-      }
-  
-      // All data sent successfully
-      fis.close();
       return true;
     } catch (IOException e) {
-      e.printStackTrace();
+      send_ERR(sendSocket, 0, "Failed to read file: " + e.getMessage());
       return false;
     }
   }
 
+  private boolean sendPacketWithRetries(DatagramSocket sendSocket, DatagramPacket packet, int blockNumber) {
+    for (int attempt = 0; attempt < 5; attempt++) {
+      try {
+        sendSocket.send(packet);
+        sendSocket.setSoTimeout(TIMEOUT_DURATION);
+        DatagramPacket ackPacket = new DatagramPacket(new byte[4], 4);
+        sendSocket.receive(ackPacket);
+
+        ByteBuffer ackBuf = ByteBuffer.wrap(ackPacket.getData());
+        if (ackBuf.getShort() == OP_ACK && ackBuf.getShort() == blockNumber) {
+          return true;
+        }
+      } catch (IOException e) {
+        System.err.println("Attempt " + attempt + " failed for block " + blockNumber);
+      }
+    }
+    send_ERR(sendSocket, 0, "Max retries reached for block " + blockNumber);
+    return false;
+  }
+
   private boolean receive_DATA_send_ACK(DatagramSocket sendSocket, String requestedFile) {
-    try (FileOutputStream fos = new FileOutputStream(requestedFile)) {
-      int expectedBlockNumber = 1;
+    try (FileOutputStream fos = new FileOutputStream(requestedFile, false)) {
+      send_ACK(sendSocket, 0);
 
+      int blockNumber = 1;
       while (true) {
-        ByteBuffer ackBuffer = ByteBuffer.allocate(4); // ACK packet size
-        ackBuffer.putShort((short) OP_ACK); // Opcode for ACK packet
-        ackBuffer.putShort((short) expectedBlockNumber); // Expected block number
+        byte[] receiveBuf = new byte[BUFSIZE];
+        DatagramPacket receivePacket = new DatagramPacket(receiveBuf, receiveBuf.length);
+        sendSocket.receive(receivePacket);
 
-        DatagramPacket ackPacket = new DatagramPacket(ackBuffer.array(), ackBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
-        sendSocket.send(ackPacket);
+        ByteBuffer buf = ByteBuffer.wrap(receivePacket.getData());
+        short opcode = buf.getShort();
+        int receivedBlockNumber = Short.toUnsignedInt(buf.getShort());
 
-        // Receive Data packet
-        byte[] buf = new byte[BUFSIZE];
-        DatagramPacket dataPacket = new DatagramPacket(buf, buf.length);
-        sendSocket.receive(dataPacket);
-
-        ByteBuffer dataBuffer = ByteBuffer.wrap(buf);
-        int opcode = dataBuffer.getShort();
-        int blockNumber = dataBuffer.getShort();
-
-        if (opcode != OP_DAT || blockNumber != expectedBlockNumber) {
-          // Invalid packet received
-          System.err.println("Invalid data packet received. Excepted block number: " + expectedBlockNumber + ", received: " + blockNumber);
-          send_ERR(sendSocket, 0, "Invalid data packet received");
+        if (opcode != OP_DAT || receivedBlockNumber != blockNumber) {
+          send_ERR(sendSocket, 4, "Unexpected packet or block number.");
           return false;
         }
 
-        // Write data to file
-        fos.write(buf, 4, dataPacket.getLength() - 4);
-
-        // Send ACK for the received data packet
-        sendSocket.send(ackPacket);
-
-        if (dataPacket.getLength() < BUFSIZE - 4) {
-          break; // Last data packet received
+        int dataLength = receivePacket.getLength() - 4;
+        if (dataLength < 512) {
+          fos.write(receiveBuf, 4, dataLength);
+          send_ACK(sendSocket, blockNumber);
+          break;
+        } else {
+          fos.write(receiveBuf, 4, dataLength);
+          send_ACK(sendSocket, blockNumber++);
         }
-
-        expectedBlockNumber++;
       }
-      // All data received successfully
-      fos.close();
       return true;
     } catch (IOException e) {
-      e.printStackTrace();
-      System.out.println("ioexception");
+      send_ERR(sendSocket, 0, "IO error: " + e.getMessage());
       return false;
+    }
+  }
+
+  private void send_ACK(DatagramSocket sendSocket, int blockNumber) {
+    ByteBuffer buf = ByteBuffer.allocate(4);
+    buf.putShort((short) OP_ACK);
+    buf.putShort((short) blockNumber);
+    try {
+      sendSocket.send(new DatagramPacket(buf.array(), buf.array().length, sendSocket.getInetAddress(), sendSocket.getPort()));
+    } catch (IOException e) {
+      System.err.println("Failed to send ACK for block " + blockNumber);
     }
   }
 
   private void send_ERR(DatagramSocket sendSocket, int errorCode, String errorMsg) {
-    ByteBuffer errBuffer = ByteBuffer.allocate(errorMsg.length() + 5); // 5 bytes for opcode and error code
-    errBuffer.putShort((short) OP_ERR); // Opcode for Error packet
-    errBuffer.putShort((short) errorCode); // Error code
+    ByteBuffer errBuffer = ByteBuffer.allocate(errorMsg.length() + 5);
+    errBuffer.putShort((short) OP_ERR);
+    errBuffer.putShort((short) errorCode);
     errBuffer.put(errorMsg.getBytes());
-    errBuffer.put((byte) 0); // Null terminator
+    errBuffer.put((byte) 0);
 
     DatagramPacket errPacket = new DatagramPacket(errBuffer.array(), errBuffer.position(), sendSocket.getInetAddress(), sendSocket.getPort());
     try {
       sendSocket.send(errPacket);
     } catch (IOException e) {
-      e.printStackTrace();
+      System.err.println("Error sending error packet: " + e.getMessage());
     }
   }
 }
-
-

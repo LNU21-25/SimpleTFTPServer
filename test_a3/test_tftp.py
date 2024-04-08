@@ -3,11 +3,13 @@ import pytest
 HOST = 'localhost'
 PORT = 4970
 
+
 # Init client
 @pytest.fixture(scope="module")
 def getClient():
     import tftpclient
     return tftpclient.TFTPClient((HOST, PORT), './read/')
+
 
 @pytest.fixture(scope="module")
 def putClient():
@@ -26,13 +28,13 @@ def test_GSBLarge(getClient):
 
 
 # Get existing 1,535 byte file
-##def test_GMB3(getClient):
-##    assert getClient.getFile(b'f3blks.bin')
+def test_GMB3(getClient):
+    assert getClient.getFile(b'f3blks.bin')
 
 
 # Get existing 262,143 byte file
-##def test_GMB512(getClient):
-##    assert getClient.getFile(b'f512blks.bin')
+def test_GMB512(getClient):
+    assert getClient.getFile(b'f512blks.bin')
 
 
 # Put 50 byte file
@@ -46,26 +48,29 @@ def test_PSB500B(putClient):
 
 
 # Put 512 byte file
-##def test_PMB1Blks(putClient):
-##    assert putClient.putFileBlocks(b'f1blk.ul', 1)
+def test_PMB1Blks(putClient):
+    assert putClient.putFileBlocks(b'f1blk.ul', 1)
 
 
 # Put 1,536 byte file
-##def test_PMB3Blks(putClient):
-##    assert putClient.putFileBlocks(b'f3blks.ul', 3)
+def test_PMB3Blks(putClient):
+    assert putClient.putFileBlocks(b'f3blks.ul', 3)
 
 
 # Put 262,144 byte file
-##def test_PMB512Blks(putClient):
-##    assert putClient.putFileBlocks(b'f512blks.ul', 512)
+def test_PMB512Blks(putClient):
+    assert putClient.putFileBlocks(b'f512blks.ul', 512)
+
 
 # Try to get a file that does not exist
 def test_GFileNotExists(getClient):
     assert getClient.getFileNotExists(b'nosuchfile')
 
+
 # Send unknown request type
 def test_BadOp10(getClient):
     assert getClient.sendBadOp(10)
+
 
 # Send an unknown request type (similar to an existing)
 def test_BadOp257(getClient):
@@ -73,10 +78,10 @@ def test_BadOp257(getClient):
 
 
 # Get a large file and fail the first ACK every time
-##def test_GMBFail1stAck(getClient):
-##    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 1)
+def test_GMBFail1stAck(getClient):
+    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 1)
 
 
 # Get a large file and fail the first two ACKs every time
-##def test_GMBFail2ndAck(getClient):
-##    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 2)
+def test_GMBFail2ndAck(getClient):
+    assert getClient.getMultiBlockFileFailAck(b'f3blks.bin', 2)
