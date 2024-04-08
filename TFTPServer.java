@@ -26,7 +26,7 @@ public class TFTPServer {
   public static final int OP_ACK = 4;
   public static final int OP_ERR = 5;
 
-  final int TIMEOUT_DURATION = 5000;
+  final int TIMEOUT_DURATION = 1000;
 
   /**
    * The main method to start the TFTP Server.
